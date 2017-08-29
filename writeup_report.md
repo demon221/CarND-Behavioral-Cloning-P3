@@ -68,7 +68,7 @@ It is a deep convolution network which works well with supervised image classifi
 
 This model consists of three convolution neural network layers with 5x5 filter sizes, two convolution neural network layers with 3x3 filter sizes and four fully connected layers.
 The model includes RELU layers to introduce nonlinearity, and the data is normalized in the model using a Keras lambda layer.
-Because the test result has less overfitting, dropout trick is not used.
+I also add a dropout of rate 0.5 on the output of five convolution layers to prevent overfitting, and the model proved to generalise quite well.
 
 The final model architecture seems like following:
 
@@ -78,6 +78,7 @@ The final model architecture seems like following:
 * Convolution: 5x5, filter: 48, strides: 2x2, activation: RELU
 * Convolution: 3x3, filter: 64, strides: 1x1, activation: RELU
 * Convolution: 3x3, filter: 64, strides: 1x1, activation: RELU
+* Dropout: rate: 0.5
 * Fully connected: neurons: 100, activation: RELU
 * Fully connected: neurons: 50, activation: RELU
 * Fully connected: neurons: 10, activation: RELU
@@ -99,6 +100,8 @@ Below is an model structure output from the Keras summary, which gives more deta
 |dense_3 (Dense)      |        (None, 10)          |      510   |
 |dense_4 (Dense)      |        (None, 1)           |      11    |
 
+It has a totally number of `252,219` parameters in the model.
+
 Here is a visualization of the NVIDIA's model architecture.
 
 ![alt text][image1]
@@ -106,12 +109,51 @@ Here is a visualization of the NVIDIA's model architecture.
 ##### - Training
 
 The model was trained using Adam optimiser with a learning rate = 1e-04 and mean squared error as a loss function.
-I split the data into 80% for the training data and 20% for validation.
+The dataset was randomly shuffled and split 80% / 20% training data to validation data. Using this I repeatedly trained the model until I determined a suitable number of training epochs. I eventually settled on 5 epochs.
 With batch size of 32, training epoch of 5, the model seems to perform quite well on both tracks.
+
+```python
+model.compile(loss='mse', optimizer=Adam(lr=learning_rate))
+```
+
+A generator is used during the training of the model, which is much more memory-efficient.
+
+```python
+history = model.fit_generator(train_generator, samples_per_epoch=len(X_train),\
+         epochs=epochs, validation_data=validation_generator, validation_steps=len(X_valid), verbose=1)
+```
+
+The training procedure is shown as following:
+
+```
+Epoch 1/5
+14190/14190 [==============================] - 3295s - loss: 0.0402 - val_loss: 0.0555
+Epoch 2/5
+14190/14190 [==============================] - 2036s - loss: 0.0388 - val_loss: 0.0528
+Epoch 3/5
+14190/14190 [==============================] - 1664s - loss: 0.0378 - val_loss: 0.0526
+Epoch 4/5
+14190/14190 [==============================] - 1662s - loss: 0.0369 - val_loss: 0.0523
+Epoch 5/5
+14190/14190 [==============================] - 1649s - loss: 0.0362 - val_loss: 0.0510
+```
+
+##### - Design Approach
+
+My strategy was start with a model that had been used in the past for analyzing images preprocessing and simulator usages.
+I firstly started with LeNet because it was relatively simple. I modified it to do a "mse" regression instead of classification. After trying it out, I decided to give the NVidia model a try since it was reported to work well for this purpose.
+
+Although not specifically called out in the paper by NVIDIA, I decided to add a dropout layer following the convolution layers to reduce the likelihood of overfitting.
+With dropout method, the training costs a shorter time, and the training loss as well as the validation loss decrease from around (0.05, 0.08) to around (0.03, 0.05).
+
+Because the training costs hours of time, so the number of epoch is firstly defined as 2, for model training error evaluation. After the model architecture is generally defined and training data is preprocessed, the number of epoch is changed to 5.
 
 #### 2.Training data collection
 
-When using the simulator to collect training data, the training data was chosen to keep the vehicle driving on the road. I used a combination of center lane driving for 3 circles, counter-clock driving for 1 circle, and some places recovering from the left and right sides of the road.
+When using the simulator to collect training data, I firstly drive a two lap around the track to keep the vehicle driving on the road. It soon became evident that more data was needed because the car tended to turn left. In the hopes of getting the model to generalize a little better, I added to the training set by driving the car around the track in the opposite direction.
+Additionally, the car would tend to get itself out of road and could not recover. So I added recovery scenarios to the training set by recording specific recovery maneuvers at problem areas of the track.
+Finally, I used a combination of center lane driving for 3 circles, counter-clock driving for 1 circle, and some places recovering from the left and right sides of the road.
+
 To make the model more general, data form the second track is also collected. It contains much more steering angles values than the first track.
 So the training data is a combination of driving data from track 1 and track2 at last.
 
@@ -144,9 +186,12 @@ def batch_generator(image_paths, angles, batch_size, is_training=True):
         yield images, steers
 ```
 
+
 #### 3. Data augmentation and preprocessing
 
-After the data collection from manual mode driving on the two tracks, I uses three steps to augment and preprocess the data.
+After the data collection from manual mode driving on the two tracks, I use three steps to augment and preprocess the data.
+To augment the dataset, I use both left and right camera images. A correction factor is added or subtracted to or from the corresponding center steering angle. The hope here is to encourage the car to steer toward the center if it is going to drive off center. In addition I try to encourage the car to recover from situations where the nose of the car is pointed off the road. To do this, I try to simulate the car aiming off the road by by flip and translate the images to the left or right.
+
 
 ##### - Use left and right camera images
 (load_data.py lines 47-55)
@@ -219,7 +264,9 @@ With data collection from two tracks and data augmentation, training data has a 
 
 At the end of the process, the vehicle is able to drive autonomously around both the first and second track without leaving the road.
 
-Here are the autonomous driving video on the two tracks.
+`video1.mp4` and `video2.mp4` from the perspective view of the vehicle are included for both tracks in this repository.
+
+As a shortcut, the autonomous driving video on the two tracks you can also find the link on YouTube.
 
 * The Lake Track
 
@@ -229,5 +276,6 @@ Here are the autonomous driving video on the two tracks.
 
 (https://youtu.be/8BDNEGsyuu0)
 
+The video file using
 We even performed some destructive tests. During autonomous driving, we tried to give manually interference and steer the car off course by acceleration or random steering.
 In most cases, the car reacted by steering back to the center. Only in extreme cases, the car lost control and wonder off into the woods or into the lake.

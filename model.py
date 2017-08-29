@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 
 from keras.models import Sequential, model_from_json
 from keras.layers import Flatten, Dense, Lambda
-from keras.layers import Convolution2D, MaxPool2D
+from keras.layers import Convolution2D, MaxPool2D, Dropout
 from keras.optimizers import Adam
 
 from load_data import batch_generator, input_shape
@@ -21,6 +21,7 @@ fileWeights = 'model.h5'
 batch_size = 32
 epochs = 5
 learning_rate = 1e-4
+keep_prob = 0.5
 
 
 # Load training data and split it into training and validation set
@@ -56,6 +57,7 @@ else:
     model.add(Convolution2D(48, (5,5), strides=(2,2), activation="relu"))
     model.add(Convolution2D(64, (3,3), strides=(1,1), activation="relu"))
     model.add(Convolution2D(64, (3,3), strides=(1,1), activation="relu"))
+    model.add(Dropout(keep_prob))
     model.add(Flatten())
     model.add(Dense(100))
     model.add(Dense(50))
@@ -68,7 +70,7 @@ else:
 
 # Save model and weights to disk
 history = model.fit_generator(train_generator, samples_per_epoch=len(X_train),\
-          epochs=epochs, validation_data=validation_generator, validation_steps=len(X_valid), verbose=1)
+         epochs=epochs, validation_data=validation_generator, validation_steps=len(X_valid), verbose=1)
 
 print("Save model to disk:")
 if Path(fileModelJSON).is_file():
@@ -80,4 +82,5 @@ with open(fileModelJSON, 'w') as jfile:
 if Path(fileWeights).is_file():
     os.remove(fileWeights)
 model.save_weights(fileWeights)
+
 
